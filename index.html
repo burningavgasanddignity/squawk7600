@@ -99,6 +99,13 @@ kbd {
 }
 .board-btn:focus-visible, .board-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .board-backdrop { display: none; }
+.share-btn {
+  position: absolute; left: 50%; top: 58%; transform: translateX(-50%);
+  font-family: var(--pixel); font-size: 12px; color: var(--bg); background: var(--accent);
+  border: 0; border-radius: 999px; padding: 8px 16px; cursor: pointer; white-space: nowrap;
+}
+.share-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 480px) { .share-btn { font-size: 11px; padding: 7px 14px; top: 56%; } }
 .touch-hint { display: none; justify-content: space-between; gap: 12px; margin: -6px 0 0; font-size: 12px; color: var(--muted); }
 @media (pointer: coarse) {
   html, body, body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -176,6 +183,7 @@ kbd {
   <p class="mode-note" id="modeNote"></p>
   <div class="stage">
     <canvas id="game" tabindex="0" aria-label="Squawk 7600 game. Press space to climb, down arrow to dive."></canvas>
+    <button type="button" class="share-btn" id="shareBtn" hidden>Share high score</button>
   </div>
   <p class="touch-hint" aria-hidden="true"><span>◀ Left side: dive</span><span>Right side: climb ▶</span></p>
   <div class="pad">
@@ -362,6 +370,18 @@ kbd {
   };
   let mode = 'classic';
   try { const m = localStorage.getItem('lowpass-mode'); if (MODES[m]) mode = m; } catch (e) {}
+  const challenge = (() => {
+    try {
+      const q = new URLSearchParams(location.search);
+      const beat = Math.floor(+q.get('beat'));
+      if (!(beat > 0 && beat < 200000)) return null;
+      const from = (q.get('from') || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8) || 'A FRIEND';
+      const m = q.get('mode');
+      if (MODES[m]) mode = m;
+      return { beat, from, mode: MODES[m] ? m : mode, beaten: false };
+    } catch (e) { return null; }
+  })();
+  let beatFlash = 0;
   const hiKey = () => mode === 'classic' ? 'lowpass-hi' : 'lowpass-hi-' + mode;
   let hi = 0;
   const loadHi = () => { hi = 0; try { hi = +localStorage.getItem(hiKey()) || 0; } catch (e) {} };
@@ -542,6 +562,8 @@ kbd {
     world += speed;
     const prev = Math.floor(score);
     score += speed * 0.025;
+    if (challenge && !challenge.beaten && mode === challenge.mode && score > challenge.beat) { challenge.beaten = true; beatFlash = 150; }
+    if (beatFlash > 0) beatFlash--;
     if (Math.floor(score / 100) > Math.floor(prev / 100)) { flash = 64; flashScore = Math.floor(score / 100) * 100; }
     if (flash > 0) flash--;
 
@@ -797,6 +819,12 @@ kbd {
     ctx.textAlign = 'left';
 
     ctx.textAlign = 'center';
+    if (challenge && mode === challenge.mode) {
+      ctx.font = '10px Silkscreen, monospace';
+      ctx.fillStyle = accent;
+      if (beatFlash > 0) { if (beatFlash % 20 < 14) ctx.fillText('YOU BEAT ' + challenge.from + '!', W / 2, 26); }
+      else if (!challenge.beaten) ctx.fillText('BEAT ' + challenge.from + ': ' + pad(challenge.beat), W / 2, 26);
+    }
     if (state === 'ready') {
       ctx.fillStyle = ink;
       ctx.font = '12px Silkscreen, monospace';
@@ -821,6 +849,8 @@ kbd {
       if (crashT > 30) ctx.fillText(touch ? 'TAP TO GO AROUND' : 'SPACE OR TAP TO GO AROUND', W / 2, 74);
     }
     ctx.textBaseline = 'alphabetic';
+    const wantShare = state === 'over' && crashT > 30 && hi > 0;
+    if (shareBtn.hidden === wantShare) shareBtn.hidden = !wantShare;
   }
 
   // ---------- loop ----------
@@ -941,6 +971,34 @@ kbd {
 
   document.getElementById('diversToggle').addEventListener('change', e => { setMode(e.target.checked ? 'divers' : 'classic'); canvas.focus({ preventScroll: true }); });
   setMode(mode);
+
+  // share your best score in this mode, with a link that challenges friends to beat it
+  var shareBtn = document.getElementById('shareBtn');
+  shareBtn.addEventListener('click', async () => {
+    const cs = board.getCallsign();
+    const url = new URL(location.origin + location.pathname);
+    url.searchParams.set('beat', String(hi));
+    if (cs) url.searchParams.set('from', cs);
+    url.searchParams.set('mode', mode);
+    const modeName = mode === 'divers' ? 'Classic + Skydivers' : 'Classic';
+    const text = `${cs ? cs + ' got' : 'I got'} ${pad(hi)} in Squawk 7600 (${modeName}). Think you can beat it?`;
+    const label = shareBtn.textContent;
+    const flashLabel = t => { shareBtn.textContent = t; setTimeout(() => { shareBtn.textContent = label; }, 1800); };
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Squawk 7600', text, url: url.href }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const all = text + ' ' + url.href;
+    try { await navigator.clipboard.writeText(all); flashLabel('Link copied!'); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = all; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.append(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+      ta.remove();
+      flashLabel(ok ? 'Link copied!' : 'Couldn\'t copy');
+    }
+  });
 
   (() => {
     const btn = document.getElementById('boardBtn');
