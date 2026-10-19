@@ -16,17 +16,18 @@
   --muted: #a3acb2;
   --soft: #e3e7ea;
   --accent: #e0532a;
+  --go: #2e9d5a;
   --pixel: "Silkscreen", "Courier New", monospace;
   --body: "IBM Plex Sans", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #13171a; --ink: #c8d1d7; --muted: #56626a; --soft: #20262b; --accent: #ff7a4d;
+    --bg: #13171a; --ink: #c8d1d7; --muted: #56626a; --soft: #20262b; --accent: #ff7a4d; --go: #4cd68a;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #13171a; --ink: #c8d1d7; --muted: #56626a; --soft: #20262b; --accent: #ff7a4d;
+  --bg: #13171a; --ink: #c8d1d7; --muted: #56626a; --soft: #20262b; --accent: #ff7a4d; --go: #4cd68a;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -170,7 +171,7 @@ kbd {
       <h1>Squawk 7600</h1>
       <button type="button" class="board-btn" id="boardBtn" aria-controls="board" aria-expanded="false">Leaderboard</button>
     </div>
-    <p class="sub">Radio's out, internet too. Set the transponder to 7600, keep the plane low over the field, hop the radio masts, slip under the gulls, and watch for hot-air balloons once you get going. Turn on Skydivers for a busier sky.</p>
+    <p class="sub">No radio. No internet. No problem. Hop the towers, duck the gulls, beat your friends. Turn on Skydivers for a busier sky.</p>
   </header>
   <div class="modes">
     <span class="mode-name">Classic</span>
@@ -344,7 +345,7 @@ kbd {
   const mix = (a, b, t) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
   function readPalette() {
     const cs = getComputedStyle(document.documentElement);
-    ['bg', 'ink', 'muted', 'accent'].forEach(k => pal[k] = hex2rgb(cs.getPropertyValue('--' + k) || '#000'));
+    ['bg', 'ink', 'muted', 'accent', 'go'].forEach(k => pal[k] = hex2rgb(cs.getPropertyValue('--' + k) || '#000'));
   }
   readPalette();
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', readPalette);
@@ -397,15 +398,19 @@ kbd {
     soft:   { name: 'SOFT FIELD',     tip: 'GRASS STRIP. LIFT OFF EARLY, STAY LOW',  length: 900,  accel: 0.016, vr: 3.8, grass: true },
   };
   const RWY_START = 20;
+  let readyT = 0, towerWait = 90, holdFlash = 0;
+  const TOWER_X = 400;   // where the tower stands, in runway coordinates
   let takeoff = 'normal', phase = 'roll', groundEffect = 0, climbout = false;
   const T = () => TAKEOFFS[takeoff];
+  const towerGreen = () => state !== 'ready' || readyT >= towerWait;
   let state, py, vy, airborne, speed, score, world, obstacles, pickups, clouds, specks, stars, tick, nightT, flash, liftT, crashT;
   let fuel, fuelFlash, endReason, chopTimer, chopPhase, chopLeft, bump, bumpV, shakeX, shakeY;
   const input = { up: false, down: false };
 
   function reset() {
     state = 'ready'; py = GY - 4; vy = 0; airborne = false; speed = 0;
-    takeoff = ['normal', 'short', 'soft'][Math.floor(Math.random() * 3)]; phase = 'roll'; groundEffect = 0; climbout = false; score = 0; world = 0;
+    takeoff = ['normal', 'short', 'soft'][Math.floor(Math.random() * 3)]; phase = 'roll'; groundEffect = 0; climbout = false;
+    readyT = 0; towerWait = T().grass ? 0 : 70 + Math.floor(Math.random() * 80); holdFlash = 0; score = 0; world = 0;
     obstacles = []; pickups = []; tick = 0; nightT = 0; flash = 0; liftT = 0; crashT = 0;
     fuel = 100; fuelFlash = 0; endReason = '';
     chopTimer = 500 + Math.random() * 300; chopPhase = 'calm'; chopLeft = 0; bump = 0; bumpV = 0; shakeX = 0; shakeY = 0;
@@ -428,8 +433,11 @@ kbd {
   }
 
   function start() {
-    if (state === 'ready') { state = 'run'; }
-    else if (state === 'over' && crashT > 30) { reset(); state = 'run'; }
+    if (state === 'ready') {
+      if (readyT < towerWait) { holdFlash = 40; return; }   // tower still showing steady red
+      state = 'run'; board.startRun(mode);
+    }
+    else if (state === 'over' && crashT > 30) { reset(); state = 'run'; board.startRun(mode); }
   }
 
   function climb() {
@@ -517,7 +525,7 @@ kbd {
   function step() {
     tick++;
     if (state === 'over') { crashT++; return; }
-    if (state === 'ready') return;
+    if (state === 'ready') { readyT++; if (holdFlash > 0) holdFlash--; return; }
     const M = MODES[mode];
 
     if (state === 'glide') {
@@ -699,6 +707,29 @@ kbd {
       if (!T().grass) ctx.fillText('27', Math.round(rwy + 16), GY + 16);
     }
 
+    if (!T().grass) {
+      const tx = Math.round(TOWER_X - world);
+      if (tx > -40 && tx < W + 10) {
+        const go = mix(pal.go, pal.go, 0);
+        ctx.fillStyle = muted;
+        ctx.fillRect(tx + 6, GY - 30, 8, 30);            // shaft
+        ctx.fillRect(tx + 2, GY - 34, 16, 4);            // cab floor
+        ctx.fillRect(tx + 1, GY - 44, 18, 2);            // roof
+        ctx.fillRect(tx + 9, GY - 50, 2, 6);             // antenna
+        ctx.fillRect(tx + 2, GY - 42, 2, 8); ctx.fillRect(tx + 16, GY - 42, 2, 8); // cab posts
+        for (let y = GY - 26; y < GY - 2; y += 6) { ctx.fillStyle = bg; ctx.fillRect(tx + 9, y, 2, 2); ctx.fillStyle = muted; }
+        // light gun in the cab window, aimed at the runway
+        const lamp = towerGreen() ? go : accent;
+        ctx.fillStyle = lamp;
+        ctx.fillRect(tx + 5, GY - 40, 4, 4);
+        if (state === 'ready' || phase === 'roll') {
+          ctx.globalAlpha = 0.5;
+          for (let i = 1; i <= 6; i++) ctx.fillRect(tx + 4 - i * 9, GY - 38 + i * 2, 5, 1);   // beam toward the plane
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
     for (const o of obstacles) {
       if (o.type === 'mast') drawMast(o, ink, accent);
       else if (o.type === 'trees') { sprite(TREE, o.x, o.y + 4, ink); sprite(TREE, o.x + 14, o.y, ink); }
@@ -828,15 +859,23 @@ kbd {
     if (state === 'ready') {
       ctx.fillStyle = ink;
       ctx.font = '12px Silkscreen, monospace';
-      ctx.fillText((T().grass ? 'GRASS STRIP' : 'RWY 27') + ', ' + T().name + ', CLEARED', W / 2, 46);
-      ctx.fillStyle = muted;
+      ctx.fillText((T().grass ? 'GRASS STRIP' : 'RWY 27') + ', ' + T().name, W / 2, 40);
       ctx.font = '10px Silkscreen, monospace';
-      ctx.fillText(T().tip, W / 2, 64);
-      ctx.fillText(touch ? 'TAP TO START THE ROLL' : 'PRESS SPACE OR TAP TO START THE ROLL', W / 2, 80);
+      if (T().grass) {
+        ctx.fillStyle = muted; ctx.fillText('NON-TOWERED, NORDO DEPARTURE', W / 2, 56);
+      } else if (towerGreen()) {
+        ctx.fillStyle = mix(pal.go, pal.go, 0); ctx.fillText('TOWER LIGHT: STEADY GREEN, CLEARED FOR TAKEOFF', W / 2, 56);
+      } else if (!(holdFlash > 0 && holdFlash % 10 < 5)) {
+        ctx.fillStyle = accent; ctx.fillText(holdFlash > 0 ? 'STEADY RED: HOLD SHORT!' : 'TOWER LIGHT: STEADY RED, HOLD SHORT', W / 2, 56);
+      }
+      ctx.fillStyle = muted;
+      ctx.fillText(T().tip, W / 2, 72);
+      if (towerGreen()) ctx.fillText(touch ? 'TAP TO START THE ROLL' : 'PRESS SPACE OR TAP TO START THE ROLL', W / 2, 88);
+      else ctx.fillText('WATCH THE TOWER FOR A GREEN LIGHT', W / 2, 88);
       if (touch) {
         ctx.fillStyle = ink;
-        ctx.textAlign = 'left';  ctx.fillText('< LEFT SIDE: DIVE', 12, 104);
-        ctx.textAlign = 'right'; ctx.fillText('RIGHT SIDE: CLIMB >', W - 12, 104);
+        ctx.textAlign = 'left';  ctx.fillText('< LEFT SIDE: DIVE', 12, 106);
+        ctx.textAlign = 'right'; ctx.fillText('RIGHT SIDE: CLIMB >', W - 12, 106);
         ctx.textAlign = 'center';
       }
     } else if (state === 'over') {
@@ -925,23 +964,37 @@ kbd {
       timer = setInterval(() => { if (!document.hidden) refresh(); }, 30000);
     }
 
-    async function submit(m, score) {
-      const res = await fetch(`${base}/rest/v1/rpc/submit_score`, {
-        method: 'POST', headers,
-        body: JSON.stringify({ p_player: player, p_mode: m, p_callsign: callsign || 'PILOT', p_score: Math.floor(score) }),
-      });
+    const rpc = async (fn, body) => {
+      const res = await fetch(`${base}/rest/v1/rpc/${fn}`, { method: 'POST', headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res.status);
+      const t = await res.text();
+      return t ? JSON.parse(t) : null;
+    };
+
+    // The database starts its own clock for every run, and rejects scores that
+    // couldn't have been reached in the time since. One score per run.
+    let runPromise = null;
+    function startRun(m) {
+      if (!ready || !player) { runPromise = null; return; }
+      runPromise = rpc('start_run', { p_player: player, p_mode: m }).catch(() => null);
     }
 
     async function post(m, score) {
-      if (!ready || !player || score <= (myBest[m] || 0)) return;
-      myBest[m] = score;
-      try { await submit(m, score); if (m === current) refresh(); } catch (e) {}
+      const pending = runPromise;
+      runPromise = null;
+      if (!ready || !player || !pending || score <= (myBest[m] || 0)) return;
+      const runId = await pending;
+      if (!runId) return;
+      try {
+        await rpc('submit_score', { p_run: runId, p_player: player, p_callsign: callsign || 'PILOT', p_score: Math.floor(score) });
+        myBest[m] = score;
+        if (m === current) refresh();
+      } catch (e) {}
     }
 
     async function renameEverywhere() {
-      if (!ready) return;
-      for (const m of Object.keys(myBest)) if (myBest[m]) { try { await submit(m, myBest[m]); } catch (e) {} }
+      if (!ready || !player) return;
+      try { await rpc('set_callsign', { p_player: player, p_callsign: callsign || 'PILOT' }); } catch (e) {}
       refresh();
     }
 
@@ -966,7 +1019,7 @@ kbd {
     csInput.addEventListener('keyup', e => e.stopPropagation());
 
     if (!ready) status.textContent = 'The leaderboard isn\'t connected yet. Add your Supabase details to index.html to turn it on.';
-    return { watch, post, setCallsign, hasCallsign: () => !!callsign, getCallsign: () => callsign };
+    return { watch, post, startRun, setCallsign, hasCallsign: () => !!callsign, getCallsign: () => callsign };
   })();
 
   document.getElementById('diversToggle').addEventListener('change', e => { setMode(e.target.checked ? 'divers' : 'classic'); canvas.focus({ preventScroll: true }); });
