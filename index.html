@@ -92,7 +92,38 @@ kbd {
 }
 .pad button:active, .pad button.on { transform: translateY(2px); border-bottom-width: 1px; }
 .pad button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (pointer: coarse) { .pad { display: flex; } .keys { display: none !important; } .callsign { display: none; } .flying-as { display: flex; } }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.board-btn, .board-close {
+  display: none; font-family: var(--pixel); font-size: 12px; color: var(--ink); background: transparent;
+  border: 1px solid var(--muted); border-radius: 999px; padding: 8px 14px; cursor: pointer;
+}
+.board-btn:focus-visible, .board-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.board-backdrop { display: none; }
+@media (pointer: coarse) {
+  body {
+    padding-block: 20px;
+    /* no text selection, copy menus or double-tap zoom while playing */
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+  .wrap { gap: 16px; }
+  .pad { display: flex; }
+  .keys, .sub, .mode-note { display: none !important; }
+  .callsign { display: none; }
+  .flying-as { display: flex; }
+  .board-btn, .board-close { display: inline-block; }
+  .board-close { margin-left: auto; }
+  /* leaderboard lives in a bottom sheet on phones */
+  .board { display: none; }
+  body.board-open .board {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; max-height: 78vh; overflow-y: auto;
+    background: var(--bg); border-top: 0; border-radius: 16px 16px 0 0;
+    padding: 20px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    box-shadow: 0 -8px 40px color-mix(in srgb, var(--ink) 30%, transparent);
+  }
+  body.board-open .board-backdrop { display: block; position: fixed; inset: 0; z-index: 14; background: color-mix(in srgb, var(--ink) 40%, transparent); }
+}
 .flying-as { display: none; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--muted); }
 .flying-as b { font-family: var(--pixel); font-weight: 400; color: var(--ink); font-size: 13px; }
 .flying-as button { font: inherit; color: var(--accent); background: none; border: 0; padding: 4px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
@@ -122,7 +153,10 @@ kbd {
 
 <div class="wrap">
   <header>
-    <h1>Squawk 7600</h1>
+    <div class="title-row">
+      <h1>Squawk 7600</h1>
+      <button type="button" class="board-btn" id="boardBtn" aria-controls="board" aria-expanded="false">Leaderboard</button>
+    </div>
     <p class="sub">Radio's out, internet too. Set the transponder to 7600, keep the plane low over the field, hop the radio masts, slip under the gulls, and watch for hot-air balloons once you get going. Turn on Skydivers for a busier sky.</p>
   </header>
   <div class="modes">
@@ -146,10 +180,11 @@ kbd {
     <span><kbd>↓</kbd> Dive under birds</span>
     <span>Or tap the sky to climb, tap the ground to dive</span>
   </div>
-  <section class="board" aria-labelledby="boardTitle">
+  <section class="board" id="board" aria-labelledby="boardTitle">
     <div class="board-head">
       <h2 id="boardTitle">Leaderboard</h2>
       <span class="board-mode" id="boardMode">Classic</span>
+      <button type="button" class="board-close" id="boardClose" aria-label="Close leaderboard">Close</button>
     </div>
     <div class="callsign">
       <label for="callsign">Your callsign</label>
@@ -161,6 +196,7 @@ kbd {
   </section>
 </div>
 
+<div class="board-backdrop" id="boardBackdrop"></div>
 <div class="sheet" id="csSheet" hidden>
   <form class="sheet-card" id="csForm" role="dialog" aria-modal="true" aria-labelledby="csTitle">
     <p class="sheet-eyebrow">Before you taxi</p>
@@ -323,6 +359,7 @@ kbd {
   let hi = 0;
   const loadHi = () => { hi = 0; try { hi = +localStorage.getItem(hiKey()) || 0; } catch (e) {} };
   loadHi();
+  const touch = matchMedia('(pointer: coarse)').matches;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let flashScore = 0;
@@ -760,7 +797,7 @@ kbd {
       ctx.fillStyle = muted;
       ctx.font = '10px Silkscreen, monospace';
       ctx.fillText(T().tip, W / 2, 64);
-      ctx.fillText('PRESS SPACE OR TAP TO START THE ROLL', W / 2, 80);
+      ctx.fillText(touch ? 'TAP TO START THE ROLL' : 'PRESS SPACE OR TAP TO START THE ROLL', W / 2, 80);
     } else if (state === 'over') {
       ctx.fillStyle = accent;
       ctx.font = '16px Silkscreen, monospace';
@@ -768,7 +805,7 @@ kbd {
       if (endReason === 'overrun') { ctx.fillStyle = muted; ctx.font = '10px Silkscreen, monospace'; ctx.fillText('ROTATE WHEN YOU SEE THE CALL', W / 2, 62); }
       ctx.fillStyle = muted;
       ctx.font = '10px Silkscreen, monospace';
-      if (crashT > 30) ctx.fillText('SPACE OR TAP TO GO AROUND', W / 2, 74);
+      if (crashT > 30) ctx.fillText(touch ? 'TAP TO GO AROUND' : 'SPACE OR TAP TO GO AROUND', W / 2, 74);
     }
     ctx.textBaseline = 'alphabetic';
   }
@@ -891,6 +928,14 @@ kbd {
 
   document.getElementById('diversToggle').addEventListener('change', e => { setMode(e.target.checked ? 'divers' : 'classic'); canvas.focus({ preventScroll: true }); });
   setMode(mode);
+
+  (() => {
+    const btn = document.getElementById('boardBtn');
+    const set = on => { document.body.classList.toggle('board-open', on); btn.setAttribute('aria-expanded', String(on)); };
+    btn.addEventListener('click', () => set(true));
+    document.getElementById('boardClose').addEventListener('click', () => set(false));
+    document.getElementById('boardBackdrop').addEventListener('click', () => set(false));
+  })();
 
   // first visit on a phone: ask for a callsign once, then never again
   (() => {
