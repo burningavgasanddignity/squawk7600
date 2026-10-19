@@ -393,13 +393,13 @@ kbd {
   let flashScore = 0;
   // Three takeoffs, picked at random each run. Distances are in screen pixels from the start of the roll.
   const TAKEOFFS = {
-    normal: { name: 'NORMAL TAKEOFF', tip: 'ROTATE AT THE CALL',                   length: 1000, accel: 0.020, vr: 4.5 },
-    short:  { name: 'SHORT FIELD',    tip: 'ROTATE AT THE CALL AND CLEAR THE TREES', length: 600,  accel: 0.030, vr: 4.5, trees: true },
-    soft:   { name: 'SOFT FIELD',     tip: 'GRASS STRIP. LIFT OFF EARLY, STAY LOW',  length: 900,  accel: 0.016, vr: 3.8, grass: true },
+    normal: { name: 'NORMAL TAKEOFF', tip: 'ROTATE AT THE CALL',                   length: 650,  accel: 0.035, vr: 4.5 },
+    short:  { name: 'SHORT FIELD',    tip: 'ROTATE AT THE CALL AND CLEAR THE TREES', length: 460,  accel: 0.055, vr: 4.2, trees: true },
+    soft:   { name: 'SOFT FIELD',     tip: 'GRASS STRIP. LIFT OFF EARLY, STAY LOW',  length: 600,  accel: 0.030, vr: 3.8, grass: true },
   };
   const RWY_START = 20;
   let readyT = 0, towerWait = 90, holdFlash = 0;
-  const TOWER_X = 400;   // where the tower stands, in runway coordinates
+  const TOWER_X = 330;   // where the tower stands, in runway coordinates
   let takeoff = 'normal', phase = 'roll', groundEffect = 0, climbout = false;
   const T = () => TAKEOFFS[takeoff];
   const towerGreen = () => state !== 'ready' || readyT >= towerWait;
@@ -434,10 +434,13 @@ kbd {
 
   function start() {
     if (state === 'ready') {
-      if (readyT < towerWait) { holdFlash = 40; return; }   // tower still showing steady red
+      if (readyT < towerWait) { endRun('incursion'); return; }   // rolled on a steady red
       state = 'run'; board.startRun(mode);
     }
-    else if (state === 'over' && crashT > 30) { reset(); state = 'run'; board.startRun(mode); }
+    else if (state === 'over' && crashT > 30) {
+      if (endReason === 'incursion') { reset(); return; }        // back to holding short, wait for green
+      reset(); state = 'run'; board.startRun(mode);
+    }
   }
 
   function climb() {
@@ -772,7 +775,7 @@ kbd {
 
     // plane
     const px = 50, top = py - PH;
-    if (state === 'over' && endReason !== 'fuel') {
+    if (state === 'over' && endReason !== 'fuel' && endReason !== 'incursion') {
       ctx.save();
       ctx.translate(px + PW / 2, top + PH / 2);
       ctx.rotate(0.35);
@@ -866,12 +869,12 @@ kbd {
       } else if (towerGreen()) {
         ctx.fillStyle = mix(pal.go, pal.go, 0); ctx.fillText('TOWER LIGHT: STEADY GREEN, CLEARED FOR TAKEOFF', W / 2, 56);
       } else if (!(holdFlash > 0 && holdFlash % 10 < 5)) {
-        ctx.fillStyle = accent; ctx.fillText(holdFlash > 0 ? 'STEADY RED: HOLD SHORT!' : 'TOWER LIGHT: STEADY RED, HOLD SHORT', W / 2, 56);
+        ctx.fillStyle = accent; ctx.fillText('TOWER LIGHT: STEADY RED, HOLD SHORT', W / 2, 56);
       }
       ctx.fillStyle = muted;
       ctx.fillText(T().tip, W / 2, 72);
       if (towerGreen()) ctx.fillText(touch ? 'TAP TO START THE ROLL' : 'PRESS SPACE OR TAP TO START THE ROLL', W / 2, 88);
-      else ctx.fillText('WATCH THE TOWER FOR A GREEN LIGHT', W / 2, 88);
+      else ctx.fillText('ROLL ON RED AND IT\'S A RUNWAY INCURSION', W / 2, 88);
       if (touch) {
         ctx.fillStyle = ink;
         ctx.textAlign = 'left';  ctx.fillText('< LEFT SIDE: DIVE', 12, 106);
@@ -881,7 +884,8 @@ kbd {
     } else if (state === 'over') {
       ctx.fillStyle = accent;
       ctx.font = '16px Silkscreen, monospace';
-      ctx.fillText(endReason === 'fuel' ? 'FORCED LANDING' : endReason === 'overrun' ? 'RUNWAY OVERRUN' : 'SQUAWK 7700', W / 2, 48);
+      ctx.fillText(endReason === 'fuel' ? 'FORCED LANDING' : endReason === 'overrun' ? 'RUNWAY OVERRUN' : endReason === 'incursion' ? 'RUNWAY INCURSION' : 'SQUAWK 7700', W / 2, 48);
+      if (endReason === 'incursion') { ctx.fillStyle = muted; ctx.font = '10px Silkscreen, monospace'; ctx.fillText('WAIT FOR THE STEADY GREEN', W / 2, 62); }
       if (endReason === 'overrun') { ctx.fillStyle = muted; ctx.font = '10px Silkscreen, monospace'; ctx.fillText('ROTATE WHEN YOU SEE THE CALL', W / 2, 62); }
       ctx.fillStyle = muted;
       ctx.font = '10px Silkscreen, monospace';
