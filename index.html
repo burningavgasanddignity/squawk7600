@@ -99,7 +99,9 @@ kbd {
 }
 .board-btn:focus-visible, .board-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .board-backdrop { display: none; }
+.touch-hint { display: none; justify-content: space-between; gap: 12px; margin: -6px 0 0; font-size: 12px; color: var(--muted); }
 @media (pointer: coarse) {
+  html, body, body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   body {
     padding-block: 20px;
     /* no text selection, copy menus or double-tap zoom while playing */
@@ -114,6 +116,9 @@ kbd {
   .callsign { display: none; }
   .flying-as { display: flex; }
   .board-btn, .board-close { display: inline-block; }
+  .touch-hint { display: flex; }
+  h1 { font-size: clamp(18px, 5.6vw, 24px); white-space: nowrap; }
+  .board-btn { font-size: 11px; padding: 7px 12px; flex-shrink: 0; }
   .board-close { margin-left: auto; }
   /* leaderboard lives in a bottom sheet on phones */
   .board { display: none; }
@@ -172,6 +177,7 @@ kbd {
   <div class="stage">
     <canvas id="game" tabindex="0" aria-label="Squawk 7600 game. Press space to climb, down arrow to dive."></canvas>
   </div>
+  <p class="touch-hint" aria-hidden="true"><span>◀ Left side: dive</span><span>Right side: climb ▶</span></p>
   <div class="pad">
     <button id="btnDive" type="button">▼ Dive</button>
     <button id="btnClimb" type="button">▲ Climb</button>
@@ -828,8 +834,8 @@ kbd {
   // ---------- shared leaderboard (Supabase) ----------
   // Paste your project's values here (Supabase dashboard → Project Settings → API Keys).
   // Use the publishable key (or the legacy "anon" key). It is meant to be public; the database rules in setup.sql keep it safe.
-  const SUPABASE_URL = '';
-  const SUPABASE_ANON_KEY = '';
+  const SUPABASE_URL = 'https://leqbxiibgjihzsslrrku.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_alSPzaiJT4L7Gmta_m07uA_1BtaTtJV';
 
   var board = (() => {
     const MODE_NAMES = { classic: 'Classic', divers: 'Classic + Skydivers' };
@@ -1011,6 +1017,15 @@ kbd {
       sync();
       if (side === 'up') climb();
     }, { passive: false });
+    // iOS ignores pointer events for long-press gestures, so cancel the raw touches too:
+    // this is what stops the magnifier bubble, the copy menu and double-tap zoom.
+    const isControl = t => t.closest && t.closest('button, input, label, a, .board, .sheet, .modes, .title-row');
+    const block = e => { if (!isControl(e.target)) e.preventDefault(); };
+    document.addEventListener('touchstart', block, { passive: false });
+    document.addEventListener('touchmove', block, { passive: false });
+    document.addEventListener('touchend', block, { passive: false });
+    document.addEventListener('contextmenu', block);
+    document.addEventListener('selectstart', e => { if (!(e.target.closest && e.target.closest('input'))) e.preventDefault(); });
     const lift = e => { if (sides.delete(e.pointerId)) sync(); };
     document.addEventListener('pointerup', lift);
     document.addEventListener('pointercancel', lift);
