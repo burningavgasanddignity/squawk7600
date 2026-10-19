@@ -393,13 +393,13 @@ kbd {
   let flashScore = 0;
   // Three takeoffs, picked at random each run. Distances are in screen pixels from the start of the roll.
   const TAKEOFFS = {
-    normal: { name: 'NORMAL TAKEOFF', tip: 'ROTATE AT THE CALL',                   length: 650,  accel: 0.035, vr: 4.5 },
-    short:  { name: 'SHORT FIELD',    tip: 'ROTATE AT THE CALL AND CLEAR THE TREES', length: 460,  accel: 0.055, vr: 4.2, trees: true },
-    soft:   { name: 'SOFT FIELD',     tip: 'GRASS STRIP. LIFT OFF EARLY, STAY LOW',  length: 600,  accel: 0.030, vr: 3.8, grass: true },
+    normal: { name: 'NORMAL TAKEOFF', tip: 'ROTATE AT THE CALL',                   length: 420,  accel: 0.070, vr: 4.0 },
+    short:  { name: 'SHORT FIELD',    tip: 'ROTATE AT THE CALL AND CLEAR THE TREES', length: 360,  accel: 0.080, vr: 3.8, trees: true },
+    soft:   { name: 'SOFT FIELD',     tip: 'GRASS STRIP. LIFT OFF EARLY, STAY LOW',  length: 420,  accel: 0.060, vr: 3.4, grass: true },
   };
   const RWY_START = 20;
   let readyT = 0, towerWait = 90, holdFlash = 0;
-  const TOWER_X = 330;   // where the tower stands, in runway coordinates
+  const TOWER_X = 260;   // where the tower stands, in runway coordinates
   let takeoff = 'normal', phase = 'roll', groundEffect = 0, climbout = false;
   const T = () => TAKEOFFS[takeoff];
   const towerGreen = () => state !== 'ready' || readyT >= towerWait;
@@ -410,7 +410,7 @@ kbd {
   function reset() {
     state = 'ready'; py = GY - 4; vy = 0; airborne = false; speed = 0;
     takeoff = ['normal', 'short', 'soft'][Math.floor(Math.random() * 3)]; phase = 'roll'; groundEffect = 0; climbout = false;
-    readyT = 0; towerWait = T().grass ? 0 : 70 + Math.floor(Math.random() * 80); holdFlash = 0; score = 0; world = 0;
+    readyT = 0; towerWait = 0; holdFlash = 0; score = 0; world = 0;
     obstacles = []; pickups = []; tick = 0; nightT = 0; flash = 0; liftT = 0; crashT = 0;
     fuel = 100; fuelFlash = 0; endReason = '';
     chopTimer = 500 + Math.random() * 300; chopPhase = 'calm'; chopLeft = 0; bump = 0; bumpV = 0; shakeX = 0; shakeY = 0;
@@ -434,11 +434,9 @@ kbd {
 
   function start() {
     if (state === 'ready') {
-      if (readyT < towerWait) { endRun('incursion'); return; }   // rolled on a steady red
       state = 'run'; board.startRun(mode);
     }
     else if (state === 'over' && crashT > 30) {
-      if (endReason === 'incursion') { reset(); return; }        // back to holding short, wait for green
       reset(); state = 'run'; board.startRun(mode);
     }
   }
