@@ -108,7 +108,8 @@ kbd {
   }
   input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
   .wrap { gap: 16px; }
-  .pad { display: flex; }
+  .wrap { touch-action: none; }
+  .board, .sheet { touch-action: pan-y; }
   .keys, .sub, .mode-note { display: none !important; }
   .callsign { display: none; }
   .flying-as { display: flex; }
@@ -798,6 +799,12 @@ kbd {
       ctx.font = '10px Silkscreen, monospace';
       ctx.fillText(T().tip, W / 2, 64);
       ctx.fillText(touch ? 'TAP TO START THE ROLL' : 'PRESS SPACE OR TAP TO START THE ROLL', W / 2, 80);
+      if (touch) {
+        ctx.fillStyle = ink;
+        ctx.textAlign = 'left';  ctx.fillText('< LEFT SIDE: DIVE', 12, 104);
+        ctx.textAlign = 'right'; ctx.fillText('RIGHT SIDE: CLIMB >', W - 12, 104);
+        ctx.textAlign = 'center';
+      }
     } else if (state === 'over') {
       ctx.fillStyle = accent;
       ctx.font = '16px Silkscreen, monospace';
@@ -978,6 +985,7 @@ kbd {
   });
 
   canvas.addEventListener('pointerdown', e => {
+    if (touch && e.pointerType === 'touch') return;
     e.preventDefault();
     canvas.focus({ preventScroll: true });
     const r = canvas.getBoundingClientRect();
@@ -985,6 +993,28 @@ kbd {
     if (state !== 'run') { start(); return; }
     if (y > 0.72) input.down = true; else { input.up = true; climb(); }
   });
+  // phones: the whole screen is the controller, right half climbs, left half dives
+  if (touch) {
+    const sides = new Map();
+    const sync = () => {
+      const vals = [...sides.values()];
+      input.up = vals.includes('up');
+      input.down = vals.includes('down');
+    };
+    document.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      if (e.target.closest('button, input, label, a, .board, .sheet, .modes, .title-row')) return;
+      e.preventDefault();
+      if (state !== 'run') { start(); return; }
+      const side = e.clientX >= window.innerWidth / 2 ? 'up' : 'down';
+      sides.set(e.pointerId, side);
+      sync();
+      if (side === 'up') climb();
+    }, { passive: false });
+    const lift = e => { if (sides.delete(e.pointerId)) sync(); };
+    document.addEventListener('pointerup', lift);
+    document.addEventListener('pointercancel', lift);
+  }
   const release = () => { input.up = false; input.down = false; };
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
